@@ -149,24 +149,38 @@
 <header><h1>PARCEL <span>PRO</span></h1></header>
 
 <div id="page-add" class="page active">
-    <div class="section-title"><i class="fas fa-plus-circle" style="color:var(--tb-orange)"></i> 新增採購項目</div>
-    <div class="card" style="padding: 20px;">
-        <input type="text" id="shop" placeholder="商家名稱 (例如：淘寶、亞馬遜)">
-        <input type="text" id="category" placeholder="類別 (例如：家居、電子產品)">
-        <textarea id="prods" rows="5" placeholder="輸入品項清單&#10;每行一個品項"></textarea>
-        <button class="primary" onclick="addOrder()"><i class="fas fa-cloud-upload-alt"></i> 同步至待出倉</button>
+    <div class="section-title"><i class="fas fa-plus-circle" style="color:var(--tb-orange)"></i> 新增採購</div>
+    <div class="card" style="padding: 16px;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 8px; margin-bottom: 8px; padding: 0 5px;">
+            <span style="font-size: 11px; color: var(--tb-text-light); font-weight: 700;">商家名稱</span>
+            <span style="font-size: 11px; color: var(--tb-text-light); font-weight: 700;">包裹分類</span>
+            <span style="font-size: 11px; color: var(--tb-text-light); font-weight: 700;">品項 (用,隔開)</span>
+        </div>
+        
+        <div id="quick-input-rows">
+            <div class="input-row" style="display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 8px; margin-bottom: 12px;">
+                <input type="text" class="q-shop" placeholder="例: 淘寶A店" style="margin-bottom:0; font-size:13px; padding:10px; border-radius:10px;">
+                <input type="text" class="q-cat" placeholder="家居" style="margin-bottom:0; font-size:13px; padding:10px; border-radius:10px;">
+                <input type="text" class="q-items" placeholder="地墊, 掛勾" style="margin-bottom:0; font-size:13px; padding:10px; border-radius:10px;" oninput="checkNewRow(this)">
+            </div>
+        </div>
+        
+        <button class="primary" onclick="batchAddFromRows()" style="margin-top: 10px;">
+            <i class="fas fa-cloud-upload-alt"></i> 同步至待出貨
+        </button>
     </div>
 </div>
 
 <div id="page-shipping" class="page">
-    <div class="section-title"><i class="fas fa-truck-loading" style="color:var(--tb-orange)"></i> 待出倉清單</div>
+    <div class="section-title"><i class="fas fa-truck-loading" style="color:var(--tb-orange)"></i> 待出貨清單</div>
     <div class="card" style="padding: 16px; background: #fff4ef; border: 1px dashed var(--tb-orange);">
-        <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--tb-orange);">批量配對重量與單號</div>
-        <textarea id="raw" rows="2" style="margin-bottom:0; font-size: 13px;" placeholder="貼上物流訊息，系統將自動提取單號與重量..." oninput="autoMatch()"></textarea>
+        <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--tb-orange);">智慧配對</div>
+        <textarea id="raw" rows="2" style="margin-bottom:0; font-size: 13px;" placeholder="貼上物流訊息..." oninput="autoMatch()"></textarea>
+        <div id="detected-ids" style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px;"></div>
     </div>
     <div id="list-shipping"></div>
     <div class="sticky-action">
-        <button class="primary" onclick="executeOutbound()">執行選中項出倉</button>
+        <button class="primary" onclick="executeOutbound()">執行出貨</button>
     </div>
 </div>
 
@@ -198,9 +212,9 @@
 
 <nav class="tab-bar">
     <div class="tab-item active" onclick="switchPage('page-add')"><i class="fas fa-plus-square"></i><span>新增</span></div>
-    <div class="tab-item" onclick="switchPage('page-shipping')"><i class="fas fa-box"></i><span>待出倉</span></div>
+    <div class="tab-item" onclick="switchPage('page-shipping')"><i class="fas fa-box"></i><span>待出貨</span></div>
     <div class="tab-item" onclick="switchPage('page-unbox')"><i class="fas fa-clipboard-check"></i><span>點收</span></div>
-    <div class="tab-item" onclick="switchPage('page-setting')"><i class="fas fa-user-cog"></i><span>管理</span></div>
+    <div class="tab-item" onclick="switchPage('page-setting')"><i class="fas fa-user-cog"></i><span>系統</span></div>
 </nav>
 
 <div id="toast"></div>
@@ -276,7 +290,7 @@
 
         if (hasUnbox && unboxPkg > 0) {
             report.innerHTML = `
-                <div style="font-size: 13px; font-weight: 700; color: #8e8e93;">待點收摘要</div>
+                <div style="font-size: 13px; font-weight: 700; color: #8e8e93;">摘要</div>
                 <div class="report-grid">
                     <div class="report-stat-item">
                         <span class="report-stat-label">包裹件數</span>
@@ -359,89 +373,272 @@
                     } else { next.push(o); }
                 });
                 storage = next; saveAndRender(); switchPage('page-unbox');
-                showToast("🚚 已移至點收頁");
+                showToast("🚚 已移至點收");
             }
         });
     }
-    function cleanAndSync() {
-        const r = document.getElementById('ship-report');
-        if (!r.dataset.pkg || r.dataset.pkg == 0) return;
-        Swal.fire({
-            title: '點收完畢？',
-            text: '資料將存入歷史紀錄並清空本頁',
-            icon: 'success',
-            showCancelButton: true,
-            confirmButtonColor: '#1c1c1e',
-            confirmButtonText: '確定歸檔'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                const now = new Date();
-                historyLog.push({ date: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`, pkg: r.dataset.pkg, w: r.dataset.w });
-                let rx = {}; 
-                storage = storage.filter(o => {
-                    if (o.status === 'unboxing') { rx[o.shop] = (rx[o.shop] || []).concat(o.items.filter(it => it.done).map(it => it.name)); return false; }
-                    return true;
-                });
-                storage.forEach(o => { if (o.status === 'shipping' && rx[o.shop]) { const s = new Set(rx[o.shop]); o.items = o.items.filter(it => !s.has(it.name)); } });
-                storage = storage.filter(o => !(o.status === 'shipping' && o.items.length === 0));
-                saveAndRender();
-                showToast("📦 點收完成");
-            }
-        });
-    }
-    function addOrder() {
-        const s = document.getElementById('shop').value.trim();
-        const c = document.getElementById('category').value.trim();
-        const p = document.getElementById('prods').value.trim().split('\n');
-        if(!s || !p[0]) return showToast("⚠️ 請輸入內容");
-        storage.push({ shop: s, category: c, status: 'shipping', ready: false, items: p.map(n => ({ name: n.trim(), done: false })), ids: [{ code: '', w: 0 }] });
-        document.getElementById('shop').value = ''; document.getElementById('category').value = ''; document.getElementById('prods').value = '';
-        saveAndRender();
-        showToast("✅ 已新增");
-    }
-    function autoMatch() {
-        const rawInput = document.getElementById('raw');
-        const lines = rawInput.value.split('\n');
-        
-        // idR: 匹配 10-25 位的英數組合 (適應 YT 開頭或純數字)
-        const idR = /[A-Z0-9]{10,25}/i;
-        // wR: 匹配數字後方跟著 KG 的格式，並忽略大小寫 (i)
-        const wR = /(\d+\.\d{1,2})\s*KG/i; 
-        
-        let isChanged = false;
-        const remainingLines = lines.filter(line => {
-            const iMatch = line.match(idR);
-            const wMatch = line.match(wR);
+function cleanAndSync() {
+    const r = document.getElementById('ship-report');
+    if (!r.dataset.pkg || r.dataset.pkg == 0) return;
+
+    Swal.fire({
+        title: '點收完畢？',
+        text: '已勾選的品項將歸檔，未勾選的將退回待出貨區。',
+        icon: 'success',
+        showCancelButton: true,
+        confirmButtonColor: '#1c1c1e',
+        confirmButtonText: '確定歸檔'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
             
-            if (iMatch && wMatch) {
-                const targetId = iMatch[0].toUpperCase(); // 統一轉大寫比對
-                const weight = parseFloat(wMatch[1]);
-                
-                let matchFound = false;
-                for (let o of storage) {
-                    if (o.status === 'shipping') {
-                        let found = o.ids.find(id => id.code.toUpperCase() === targetId);
-                        if (found) {
-                            found.w = weight;
-                            isChanged = true;
-                            matchFound = true;
-                            break;
+            let newStorage = [];
+            let archivedWeight = 0;
+            let archivedPkg = 0;
+
+            storage.forEach(order => {
+                if (order.status === 'unboxing') {
+                    // 分離已完成與未完成的品項
+                    const doneItems = order.items.filter(it => it.done);
+                    const pendingItems = order.items.filter(it => !it.done);
+
+                    // 如果有完成的品項，計算這張單的重量貢獻（僅作紀錄用）
+                    if (doneItems.length > 0) {
+                        archivedWeight += order.ids.reduce((sum, id) => sum + (id.w || 0), 0);
+                        archivedPkg += order.ids.filter(id => id.w > 0).length;
+                    }
+
+                    // 如果還有「未完成」的品項，將它們丟回 shipping 狀態
+                    if (pendingItems.length > 0) {
+                        newStorage.push({
+                            shop: order.shop,
+                            category: order.category,
+                            status: 'shipping', // 回退狀態
+                            ready: false,       // 取消勾選
+                            items: pendingItems.map(it => ({ name: it.name, done: false })),
+                            ids: [{ code: '', w: 0 }] // 清空單號，等待下次匹配新包裹
+                        });
+                    }
+                } else {
+                    // 非點收頁面的東西（原本就在 shipping 的）保持不變
+                    newStorage.push(order);
+                }
+            });
+
+            // 紀錄歷史（僅紀錄本次歸檔的總量）
+            if (archivedPkg > 0) {
+                historyLog.push({ 
+                    date: dateStr, 
+                    pkg: archivedPkg, 
+                    w: archivedWeight.toFixed(2) 
+                });
+            }
+
+            storage = newStorage;
+            saveAndRender();
+            showToast("📦 已歸檔完成，未出品項已回退");
+            switchPage('page-shipping'); // 自動跳回待出倉查看剩餘品項
+        }
+    });
+}
+
+// 1. 批次新增：支援「店家/類別/品項1,品項2」格式
+// 自動增加新行邏輯
+// 邏輯 1：自動增行 - 當你在最後一行的「品項」打字，就會自動蹦出下一行
+function checkNewRow(input) {
+    const rows = document.getElementById('quick-input-rows');
+    const lastRow = rows.lastElementChild;
+    if (input.closest('.input-row') === lastRow && input.value.trim() !== '') {
+        const newRow = lastRow.cloneNode(true);
+        newRow.querySelectorAll('input').forEach(i => i.value = ''); // 清空新行內容
+        rows.appendChild(newRow);
+    }
+}
+
+// 邏輯 2：批次存入 - 一次把所有格子裡的資料掃描進資料庫
+function batchAddFromRows() {
+    const rows = document.querySelectorAll('.input-row');
+    let count = 0;
+
+    rows.forEach(row => {
+        const shop = row.querySelector('.q-shop').value.trim();
+        const cat = row.querySelector('.q-cat').value.trim() || "一般";
+        const prodStr = row.querySelector('.q-items').value.trim();
+
+        // 只要有填商家和品項，就視為一筆有效包裹
+        if (shop && prodStr) {
+            const items = prodStr.split(/[,，]/).map(n => ({ 
+                name: n.trim(), 
+                done: false 
+            })).filter(it => it.name !== "");
+
+            if (items.length > 0) {
+                storage.push({ 
+                    shop: shop, 
+                    category: cat, 
+                    status: 'shipping', 
+                    ready: false, 
+                    items: items, 
+                    ids: [{ code: '', w: 0 }] // 維持預錄機制，等待後續 autoMatch 補重
+                });
+                count++;
+            }
+        }
+    });
+
+    if (count === 0) return showToast("⚠️ 請至少完整填寫一組店家與品項");
+
+    // 重置介面，清空到只剩一行
+    document.getElementById('quick-input-rows').innerHTML = `
+        <div class="input-row" style="display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 8px; margin-bottom: 12px;">
+            <input type="text" class="q-shop" placeholder="例: 淘寶A店" style="margin-bottom:0; font-size:13px; padding:10px; border-radius:10px;">
+            <input type="text" class="q-cat" placeholder="家居" style="margin-bottom:0; font-size:13px; padding:10px; border-radius:10px;">
+            <input type="text" class="q-items" placeholder="地墊, 掛勾" style="margin-bottom:0; font-size:13px; padding:10px; border-radius:10px;" oninput="checkNewRow(this)">
+        </div>
+    `;
+
+    saveAndRender(); // 觸發原本的存檔與畫面更新
+    showToast(`✅ 成功同步 ${count} 筆淘寶包裹`);
+}
+// 1. 修改智慧偵測：同時提取單號與重量，並存入按鈕的 dataset 中
+function autoMatch() {
+    const rawInput = document.getElementById('raw');
+    const container = document.getElementById('detected-ids');
+    const text = rawInput.value.trim();
+    
+    if (!text) {
+        container.innerHTML = '';
+        return;
+    }
+
+    const idR = /[A-Z0-9]{10,25}/i;
+    const wR = /(\d+\.\d{1,2})\s*KG/i; 
+
+    const lines = text.split('\n');
+    let newLines = [...lines]; // 用來追蹤剩餘文字
+    const detectedData = [];
+    let autoMatchedCount = 0;
+
+    lines.forEach((line, index) => {
+        const iMatch = line.match(idR);
+        const wMatch = line.match(wR);
+        
+        if (iMatch) {
+            const id = iMatch[0].toUpperCase();
+            const weight = wMatch ? parseFloat(wMatch[1]) : 0;
+
+            // --- 核心邏輯：檢查單號是否已存在 ---
+            let found = false;
+            storage.forEach(order => {
+                order.ids.forEach(idObj => {
+                    if (idObj.code.toUpperCase() === id) {
+                        found = true;
+                        // 如果單號已存在且尚未有重量，自動補齊
+                        if (idObj.w === 0 && weight > 0) {
+                            idObj.w = weight;
+                            autoMatchedCount++;
+                            // 從剩餘行數中標記移除（這裡先記錄單號，後面統一過濾）
                         }
                     }
-                }
-                return !matchFound; // 如果配對成功，這行會被過濾掉（從輸入框消失）
-            }
-            return true; // 沒配對到，保留在輸入框
-        });
+                });
+            });
 
-        if (isChanged) {
-            saveAndRender();
-            rawInput.value = remainingLines.join('\n').trim();
-            showToast("🎯 自動配對成功");
+            // 如果是自動補齊成功的單號，我們直接從 newLines 移除它
+            if (found && weight > 0) {
+                newLines = newLines.filter(l => !l.toUpperCase().includes(id));
+            }
+
+            // 如果是「完全陌生」的單號，才加入待分配清單（產生按鈕）
+            if (!found) {
+                detectedData.push({ id, weight });
+            }
         }
+    });
+
+    // 如果有自動補齊，更新輸入框內容並儲存
+    if (autoMatchedCount > 0) {
+        rawInput.value = newLines.join('\n').trim();
+        saveAndRender();
+        showToast(`✨ 自動補齊 ${autoMatchedCount} 筆包裹重量`);
     }
 
-    function exportData() {
+    // 渲染剩下的陌生單號按鈕
+    if (detectedData.length === 0) {
+        container.innerHTML = text === "" ? "" : `<div style="color:var(--tb-text-light); font-size:12px; padding:10px;">✨ 偵測單號皆已處理</div>`;
+    } else {
+        container.innerHTML = detectedData.map(data => {
+            const shortId = data.id.length > 6 ? `_${data.id.slice(-6)}` : data.id;
+            return `
+                <button class="secondary" 
+                    style="background:var(--tb-orange-gradient); color:white; padding:8px 15px; border-radius:10px; font-size:12px; border:none; box-shadow:var(--shadow); min-width:100px;" 
+                    onclick="matchIdToOrder('${data.id}', ${data.weight})">
+                    <i class="fas fa-box"></i> ${shortId}
+                    <span style="display:block; font-size:10px; opacity:0.9;">${data.weight > 0 ? data.weight + ' kg' : '無重量'}</span>
+                </button>
+            `;
+        }).join('');
+    }
+}
+
+// 2. 修改配對函數：接收重量參數，並直接寫入 storage
+async function matchIdToOrder(id, weight) {
+    // 1. 取得尚未勾選完成的訂單 (排除已 ready 的)
+    const pendingOrders = storage.filter(o => o.status === 'shipping' && !o.ready);
+    
+    if (pendingOrders.length === 0) {
+        return Swal.fire('提示', '目前沒有可分配的訂單', 'info');
+    }
+
+    const { value: orderIdx } = await Swal.fire({
+        title: '確認配對資訊',
+        html: `
+            <div style="text-align:left; background:#f4f4f4; padding:15px; border-radius:10px; margin-bottom:15px;">
+                <div>單號：<b style="color:var(--tb-orange)">${id}</b></div>
+                <div>重量：<b style="color:var(--tb-orange)">${weight} kg</b></div>
+            </div>
+            請選擇要分配的店家項目：`,
+        input: 'select',
+        inputOptions: pendingOrders.reduce((acc, curr, idx) => {
+            const pkgCount = curr.ids.filter(i => i.code !== '').length;
+            acc[idx] = `[${curr.shop}] ${curr.items.map(i => i.name).join(', ')} ${pkgCount > 0 ? `(已存 ${pkgCount} 包)` : ''}`;
+            return acc;
+        }, {}),
+        inputPlaceholder: '--- 請選擇店家 ---',
+        showCancelButton: true,
+        confirmButtonColor: '#ff5000',
+        confirmButtonText: '確認分配'
+    });
+
+    if (orderIdx !== undefined && orderIdx !== "") {
+        const target = pendingOrders[orderIdx];
+        
+        // 更新資料庫
+        if (target.ids.length === 1 && target.ids[0].code === '') {
+            target.ids[0] = { code: id, w: weight };
+        } else {
+            target.ids.push({ code: id, w: weight });
+        }
+        
+        // --- 強力清理機制 ---
+        const rawInput = document.getElementById('raw');
+        // 1. 取得所有行，並過濾掉「包含該單號」的那一行
+        const lines = rawInput.value.split('\n');
+        const filteredLines = lines.filter(line => !line.toUpperCase().includes(id.toUpperCase()));
+        
+        // 2. 把剩下的內容重新拼回去，並更新到畫面的文本框
+        rawInput.value = filteredLines.join('\n').trim();
+
+        // 3. 儲存並重新渲染清單
+        saveAndRender();
+        
+        // 4. 重要：立即重新執行 autoMatch，讓已刪除行的按鈕消失
+        autoMatch(); 
+
+        showToast(`✅ ${id} 已完成分配`);
+    }
+}
+function exportData() {
         const code = btoa(unescape(encodeURIComponent(JSON.stringify({ s: storage, h: historyLog }))));
         const t = document.createElement("textarea"); document.body.appendChild(t); t.value = code; t.select();
         document.execCommand("copy"); document.body.removeChild(t);
