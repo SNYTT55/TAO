@@ -249,16 +249,40 @@
         document.getElementById('shop').value = ''; document.getElementById('category').value = ''; document.getElementById('prods').value = '';
         saveAndRender(); alert("已建檔");
     }
-
     function autoMatch() {
-        const raw = document.getElementById('raw').value;
-        const idR = /[A-Z0-9]{10,25}/g, wR = /\d+\.\d{1,2}/g;
-        raw.split('\n').forEach(l => {
-            const i = l.match(idR), w = l.match(wR);
-            if(i && w) storage.forEach(o => { if(o.status === 'shipping') o.ids.forEach(id => { if(id.code === i[0]) id.w = parseFloat(w[0]); }); });
-        });
+    const rawInput = document.getElementById('raw');
+    const lines = rawInput.value.split('\n');
+    const idR = /[A-Z0-9]{10,25}/g;
+    const wR = /\d+\.\d{1,2}/g;
+    
+    // 過濾掉那些已經配對成功的行
+    const remainingLines = lines.filter(line => {
+        const i = line.match(idR);
+        const w = line.match(wR);
+        let lineMatched = false;
+
+        if (i && w) {
+            storage.forEach(o => {
+                if (o.status === 'shipping') {
+                    o.ids.forEach(id => {
+                        if (id.code === i[0]) {
+                            id.w = parseFloat(w[0]);
+                            lineMatched = true;
+                        }
+                    });
+                }
+            });
+        }
+        // 如果這行沒配對到，就保留下來
+        return !lineMatched;
+    });
+
+    // 只有在資料有變動時才重新渲染
+    if (remainingLines.length !== lines.length) {
         saveAndRender();
+        rawInput.value = remainingLines.join('\n').trim(); 
     }
+}
 
     function exportData() {
         const code = btoa(unescape(encodeURIComponent(JSON.stringify({ s: storage, h: historyLog }))));
